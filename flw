@@ -1,0 +1,64 @@
+#!/usr/bin/perl -nw -- 
+# usage: see pod at the end
+
+# options
+BEGIN {
+  our $long = 10;                # above it becomes a potential culprit
+  our $very_long = 20;           # above it is a culprit
+  our $exceptions = qr/\b_+\b/o; # will never be a culprit
+  our $cnt_threshold = 10;       
+  our $score_threshold = 100;
+}
+
+# count number of occurences of 'long' words
+our %wordcnt; # long word count
+for my $word (/\b(\w{$long,})\b/go) {
+  $wordcnt{$word}++ unless $word =~ $exceptions;
+}
+
+END {
+  # assemble culprits
+  my @culprits;
+  for my $word (keys %wordcnt) {
+    my $len = length $word;
+    my $cnt = $wordcnt{$word};
+    my $score = $len * $cnt;
+    my $is_very_long = $len > $very_long;
+    my $is_long_overall = ($cnt > $cnt_threshold) && ($score > $score_threshold);
+    if ($is_very_long || $is_long_overall) {
+      push @culprits, [$score, $len, $cnt, $word];
+    }
+  }
+  
+  # sort culprits
+  @culprits = sort { $$b[0] <=> $$a[0] } @culprits;
+  
+  # print culprits
+  for $c (@culprits) {
+    printf "%4d%4d%4d %s\n", @$c;
+  }
+}
+
+__END__
+=pod
+
+=head1 NAME
+
+B<flw> - find (too) long words
+
+=head1 SYNOPSIS
+
+B<flw> FILE...
+
+=head1 DESCRIPTION
+
+Find (too) long words in the given files. What 'too long' means is given by the
+options.
+       
+=head1 OPTIONS
+
+There are no command line options yet. However, you can easily change some
+options in the options section at the beginning of the code.
+
+        
+=cut

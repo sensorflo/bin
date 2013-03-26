@@ -1,0 +1,2 @@
+#!/bin/bash
+find -iname '*.flac' -print0 | xargs -0 metaflac --remove-tag="$1" --set-tag="$1"="$2" 

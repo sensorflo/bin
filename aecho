@@ -1,0 +1,7 @@
+#!/bin/bash
+# echo "cmd name: '$0'"
+N=1
+for a in "$@"; do
+  echo "arg $N: '$a'"
+  N=$((N+1))
+done

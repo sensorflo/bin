@@ -1,0 +1,41 @@
+#!/usr/bin/perl -w
+my $pocket = 1_000;
+my $win_sum = 0;
+my $bet = 1;
+my $round = 0;
+my $max_pocket = $pocket;
+my $strike = 0;  
+my $has_won = 0;
+my $old_has_won = 0;
+
+while ( $bet < $pocket ) {
+  $round++;
+  
+  # bet
+  $pocket -= $bet;
+  
+  # weehl is turning
+  $old_has_won = $has_won;
+  $has_won = (18 <= rand(37));
+  
+  # outcome
+  if ($has_won) {
+    $pocket += $bet * 2;
+    if ($pocket>$max_pocket) {
+      $max_pocket = $pocket;
+    }
+    $win_sum += 1;
+    $bet = 1;
+  }
+  else {
+    $bet *= 2;
+  } 
+  if ( $old_has_won == $has_won ) {
+    $strike++;
+  }
+  else {
+    $strike = 0;
+  }
+}
+
+print "lost all money after $round rounds. Bad luck for $strike rounds. Max pocket was $max_pocket\n";

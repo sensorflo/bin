@@ -1,0 +1,295 @@
+#!/usr/bin/perl -w --
+
+use strict;
+use Getopt::Long;
+use English;
+
+sub fread($\$);
+sub fread($\$);
+sub fwrite(\$$);
+sub fbackup($);
+sub splitr_core(\$$);
+sub process_options();
+sub get_fname_part(\$\$$);
+
+# ----------------------------------------------------------------------
+# options
+# ----------------------------------------------------------------------
+
+# WARNING: filenames containing something that matches the regex following the fn group are now invalid
+# use \n? instead $ to have \n within the separator
+#         instead \n to allow for a separator on the last line of the file, i.e an emtpy part file
+#         even \n within filename is allowed here (thus .*? instead [^\n]*?)
+# TODO: encode into regex wheter previous file was terminated by \n or not
+#       cat2h has also to adapt to this
+# TODO: cat2h shall check whether delimiter is not contained within text
+our $split_regex = '^(~+)(?<nnl>nnl)?\h*<(?<fn>.*?)>\h*\1\n?';
+our @fnames;
+our $DontTouchIfEqual = 1;
+our $MakeBackup = 2; # 0 never, 1 only if file is changed, 2 always
+our $fname_part_pattern = '%b-%f-%n-%n'; # f filename from sep, b bigfilename, n partno
+our $sep_type = 0; # 0 header, 1 delimiter, 2 separator
+# TODO: implement $sep_type
+
+process_options();
+
+# ----------------------------------------------------------------------
+# actual main
+# ----------------------------------------------------------------------
+
+for my $fname (@fnames) {
+  my $ftext;
+  fread($fname,$ftext);
+
+  (my $fname_sansdir = $fname) =~ s@.*/@@;
+  
+  # TODO: allow for - to mean stdin
+  # TODO: if no file is given, open stdin (i.e. set fname to -)
+  
+  my @tmp = splitr_core($ftext,$fname);
+  for ( my $part_no = 0; @tmp; $part_no+=1 ) {
+    my ($fname_part_raw,$posstart,$posend) = splice( @tmp, 0, 3 ) ;
+    
+    my $fname_part = get_fname_part($fname_sansdir, $fname_part_raw, $part_no);
+    
+    my $ftext_part = substr($ftext,$posstart,$posend-$posstart);
+    
+    # test for equality
+    my $is_equal = 0;
+    if ($DontTouchIfEqual) {
+      if ( ! -e $fname_part ) {
+        $is_equal = 0;
+      } else {
+        my $ftext_existing;
+        fread($fname_part,$ftext_existing);
+        $is_equal = ($ftext_part eq $ftext_existing);
+      }
+    } 
+    
+    if ( $MakeBackup==2 || ($MakeBackup==1 && !$is_equal) ) {
+      fbackup($fname_part);
+    } 
+    
+    unless ($DontTouchIfEqual && $is_equal) {
+      fwrite( $ftext_part , $fname_part );
+    } 
+  }
+} 
+
+# ----------------------------------------------------------------------
+# subs
+# ----------------------------------------------------------------------
+
+# Returns a reference to the files content (scalar), the argument being the
+# file's name.
+sub fread($\$) {
+  my ($fname,$rftext) = @_;
+  local $/ = undef;
+  if ( $fname eq '-') {
+    open FILE '-' or die "Can't open STDIN";
+  } else {
+    open FILE, "<", $fname or die "Can't open file '$fname' for reading";
+  }
+  $$rftext = <FILE>;
+  close FILE;
+}
+
+# fwrite content, file-name
+# Writes the file's content to a file with the given name. 
+sub fwrite(\$$) {
+  my ($rftext,$fname) = @_;
+  open FILE, ">", $fname or die "Can't open file '$fname' for writing";
+  print FILE $$rftext;
+  close FILE;
+}
+
+# makes a backup of the given filename. The backups filename is created using
+# the rules given by the options
+sub fbackup($) {
+  # to be implemented
+}
+
+# returns the part's file name
+sub get_fname_part(\$\$$) {
+  my ($rfname,$rfname_part_raw,$part_no) = @_;
+  
+  if ($fname_part_pattern eq '%f') {
+    # the common case "%f" is optimized/short-rcuited
+    return $$rfname_part_raw;
+  }
+  else {
+    my %t = ( b => $rfname, f => $rfname_part_raw, n => \$part_no);
+    (my $fname_part = $fname_part_pattern) =~
+      s/((?:[^%\\]|\\.|%(?![bfn]))*)%([bfn])/$1${$t{$2}}/g;
+    # TODO: compile every part of regex that is possible
+    return $fname_part;
+  }   
+}
+
+# splitr_core filetext, filename
+# Splits the given filetext into pieces. Returns a flat list of filename, startpos, endpos.
+sub splitr_core (\$$) {
+  my ($rftext,$fname) = @_;
+  
+  # the current match/separator is always associated to the file content
+  # (delimited by the next match/separator) of the next iteration
+  
+  my $i = 0;
+  my $seps_fname; # filename within currents separator
+  my $seps_end;
+  my @result;
+  
+  while ( $$rftext =~ m/(?:$split_regex)|\Z/gpmsx ) {
+    my $contents_fname = $seps_fname;
+    my $content_start = $seps_end;
+    $seps_end = $LAST_MATCH_END[0];
+    my $content_end = $LAST_MATCH_START[0];
+
+    # BUG: if file contains no separator, things go wrong
+    
+    # separator found: filename is either in group named fn or in group 1
+    if ( ${^MATCH} ) {
+      if ( $i==0 && $LAST_MATCH_START[0]>0 ) {
+        die "'$fname' does not start with a separator."
+      } 
+      
+      # extract wether or not the previous file ended with newline
+      my $nnl_group = $+{"nnl"};
+      if ( defined $nnl_group || defined $2 ) {
+        $content_end -= 1;
+      }
+
+      # extract file name from separator match
+      my $fn_group = $+{"fn"};
+      if ( defined $fn_group  ) {
+        $seps_fname = $fn_group;        
+      }
+      elsif ( defined $1 ) {
+        $seps_fname = $1;        
+      } else {
+        # BUG: only die if pattern really needs file name
+        die "Coudnt find filename within separator '${^MATCH}'";
+      }
+    }
+
+    # if no separator found, there's nothing todo
+    
+    $i += 1;
+    if ($i == 1) {
+      next;
+    } 
+    
+    if ( ! defined $contents_fname) {
+      die "Föck";
+    } 
+    push @result, ($contents_fname, $content_start, $content_end); 
+    
+    # KLUDGE: For unknown reasons the match in the while loop has two empty
+    # matches at the end of the file instead only one. This here leaves the loop
+    # after the first empty match.
+    unless ( ${^MATCH} ) {
+      last;
+    }
+  }
+  
+  return @result;
+}
+
+sub process_options() {
+  Getopt::Long::Configure("bundling");
+  my $stdio = 0;
+  my $options_ok = GetOptions
+    ( "r|regex=s" => \$split_regex,
+      "n|name-pattern=s" => \$fname_part_pattern,
+      "d|dont-touch" => \$DontTouchIfEqual,
+      "" => \$stdio,
+    );
+  unless ($options_ok) {
+    die "Options not ok"
+  }
+  @fnames = @ARGV;
+  if ( $#ARGV==0 || $stdio) {
+    push @fnames, "-";
+  } 
+  # BUG: - is not in order to the filenames in @ARGV
+}
+
+__END__
+
+=pod
+
+=head1 NAME
+
+B<splitr> - split a file into pieces by a regular expression
+
+=head1 SYNOPSIS
+
+B<splitr> [options] [ I<file> ]
+
+=head1 DESCRIPTION
+
+B<splitr> splits a file into pieces by a regular expression matching a
+separator. The filenames of the pieces are given by a regex pattern match
+contained in the separator. For example, C<splitr bigfile> will split the file
+F<bigfile>
+
+  ~ <file1> ~
+  part1 line1
+  part1 line2
+  ~ <file2> ~
+  part2 line1
+
+into the files named F<file1> and F<file2>.
+
+=head1 OPTIONS
+
+=over
+
+=item B<-r, --regex=>I<regex>
+
+Blabliblablu
+
+=item B<-d, --dont-touch>
+
+Blabliblablu
+
+=item B<--make-backup>
+
+Blabliblablu
+
+=item B<--help>
+
+Blabliblablu
+
+=item B<--version>
+
+Blabliblablu
+
+=back
+
+=head1 SEE ALSO
+
+L<split(1)>, L<cath(1)>, L<cat2w(1)>
+
+=head1 AUTHOR
+
+Written by Florian Kaufmann
+
+=head1 COPYRIGHT
+
+Copyright (C) 2009  Florian Kaufmann
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+=cut
+

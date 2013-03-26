@@ -1,0 +1,27 @@
+#!/bin/bash
+for file in "$@"; do
+  metadata=`metaflac --list "$file"`
+  perl <<<"$metadata" -ne '
+    use English;
+    chomp;
+    $tag{$1}=$2 if /comment\[\d+\]:\s*(\w*)=(.*)/;
+    END { 
+      $delimiter = "\s+[-/]\s+";
+      if ($tag{TITLE} =~ m|^(?<artist>.*?)$delimiter(?<title>.*?)$|) {
+        print "$tag{TRACKNUMBER}~$LAST_PAREN_MATCH{title}~$LAST_PAREN_MATCH{artist}";
+      } else {
+        print "$tag{TRACKNUMBER}~$tag{TITLE}~$tag{ARTIST}";
+      }
+    }' | \
+    {
+      IFS='~' read tracknumber title artist
+      metaflac \
+        --remove-tag=TITLE \
+        --remove-tag=ARTIST \
+        --set-tag=TITLE="$title" \
+        --set-tag=ARTIST="$artist" \
+        "$file"
+      mv --no-clobber "$file" "$tracknumber - $title - $artist.flac"
+    }
+done
+# metaflac --remove-tag=ALBUMARTIST --set-tag=ALBUMARTIST="Bim & ShaMane" *.flac
