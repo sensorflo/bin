@@ -1,0 +1,9 @@
+#!/bin/bash
+# Harmonizes all these dates: file modification data, all dates in the exiv
+# meta data.
+ALL_EXIF_DATES=$(exiftool -T -alldates) "$@"
+filedate  # modify?
+if not all dates equal
+  print all dates
+  exit
+  

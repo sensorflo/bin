@@ -1,0 +1,36 @@
+#!/usr/bin/python
+# Create a resized and jpgeg2000 converted copy of all images in a directory
+# while preserving meta data and file modification dates.
+import subprocess
+import os
+
+orig_fn = "test.jpg"
+small_fn = "test-small.jp2"
+
+def resize_convert(orig_fn, small_fn):
+    # todo: test for existence of 'convert' and 'exiftool'. If not present,
+    # print the same info as ubuntu does when it is not installed.
+    if orig_fn == small_fn:
+        raise ValueError, 'original filename and (new) small file are identical'
+    subprocess.check_call(["convert", orig_fn, "-adaptive-resize", "1920x1080",
+                           "-quality", "80", "-compress", "JPEG2000", small_fn])
+    subprocess.check_call(["exiftool", "-tagsfromfile", orig_fn, "-all:ALL",
+                           "-overwrite_original", small_fn])
+    os.utime(small_fn, (os.stat(small_fn).st_atime, os.stat(orig_fn).st_mtime))
+
+resize_convert(orig_fn, small_fn)
+
+# subprocess.call(["convert", "test.jpg", "-adaptive-resize", "1920x1080", "-quality", "10",                          "test-small-10.jpg"])
+# subprocess.call(["convert", "test.jpg", "-adaptive-resize", "1920x1080", "-quality", "10", "-compress", "JPEG2000", "test-small-10.jp2"])
+# subprocess.call(["convert", "test.jpg", "-adaptive-resize", "1920x1080", "-quality", "30",                          "test-small-30.jpg"])
+# subprocess.call(["convert", "test.jpg", "-adaptive-resize", "1920x1080", "-quality", "30", "-compress", "JPEG2000", "test-small-30.jp2"])
+# subprocess.call(["convert", "test.jpg", "-adaptive-resize", "1920x1080", "-quality", "50",                          "test-small-50.jpg"])
+# subprocess.call(["convert", "test.jpg", "-adaptive-resize", "1920x1080", "-quality", "50", "-compress", "JPEG2000", "test-small-50.jp2"])
+# subprocess.call(["convert", "test.jpg", "-adaptive-resize", "1920x1080", "-quality", "80",                          "test-small-80.jpg"])
+# subprocess.call(["convert", "test.jpg", "-adaptive-resize", "1920x1080", "-quality", "80", "-compress", "JPEG2000", "test-small-80.jp2"])
+# subprocess.call(["convert", "test.jpg", "-adaptive-resize", "1920x1080",                                            "test-small.jpg"])
+# subprocess.call(["convert", "test.jpg", "-adaptive-resize", "1920x1080",                   "-compress", "JPEG2000", "test-small.jp2"])
+# 
+# does not update many of the exif
+# exiftool -tagsfromfile test.jpg -all:all -overwrite_original test-small-80.jp2 
+

@@ -1,0 +1,4 @@
+#!/bin/bash
+mkdir --parents "$@"
+echo "${@: -1}"
+cd "${@: -1}"

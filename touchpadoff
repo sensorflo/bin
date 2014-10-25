@@ -1,0 +1,2 @@
+#!/bin/sh
+synclient TouchpadOff=0 && synclient TouchpadOff=1

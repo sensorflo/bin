@@ -1,0 +1,13 @@
+#!/bin/bash
+# For each .jpg / .jpeg file in current directory (not recursively), move it
+# to the subdirectory named after the camera model noted in the exiv meta
+# data.
+find -maxdepth 1 -iregex '.*\.jpe?g$' | while read file; do 
+  model=$(exiftool -p ~/tmp/fmtfile "$file")
+	if [ -n "${model}" ]; then
+		if [ ! -d "${model}" ]; then
+			mkdir "${model}"
+		fi
+		mv "$file" "${model}/$file"
+  fi
+done
