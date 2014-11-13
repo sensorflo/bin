@@ -1,0 +1,22 @@
+#!/usr/bin/python
+import random
+geil=True
+random.seed()
+total_prize=0
+avg_prize=0
+max_prize=0
+game_cnt=1
+while (geil):
+    rounds=1
+    while (random.randint(0,1)==0):
+        rounds += 1
+    prize = 2 ** rounds
+    total_prize += prize
+    avg_prize = total_prize / game_cnt 
+    if (prize>max_prize):
+        max_prize=prize
+    if (game_cnt%1000000==0):
+        print str(game_cnt) + "\t" + str(prize) + "\t" + str(avg_prize) + "\t" + str(max_prize) 
+    game_cnt += 1
+    
+    

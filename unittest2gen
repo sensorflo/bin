@@ -1,0 +1,118 @@
+#!/bin/bash
+#
+# SYNOPSYS:
+#   unittest2gen [DSTDIR]
+#
+# DESCRIPTION:
+#   Generates a new empty unittest2 project in DSTDIR and a visual studio
+#   solution (.sln) in DSTDIR/Sources (i.e. the main project). DSTDIR is the
+#   root dir of a logical project, e.g. .../DieBonder/PC/MyMMPS/MyProject: it
+#   shall not yet contain the suffix /UnitTest2. A trailing / is optional.
+#   Already existing files are not overwritten. If you want that, you have to
+#   remove them yourself, e.g. by removing the whole UnitTest2 directory. DSTDIR
+#   defaults to the current working directory.
+
+
+# prints the content of an .sln file. $1 is the base name of the project
+function sln_gen()
+{
+  # maybe generating a uuid is nil since MS studio overwrites it anyway
+  PROJ_MAIN_UUID=$(uuidgen | tr '[:lower:]' '[:upper:]')
+  PROJ_OLDUNITTEST_UUID=$(uuidgen | tr '[:lower:]' '[:upper:]')
+  PROJ_UNITTEST2_UUID=$(uuidgen | tr '[:lower:]' '[:upper:]')
+  MAIN_NAME=$(find "${ROOTDIR}/Sources/" -maxdepth 1 -iname '*.vcxproj' | perl -pe 's/.*\b(\w+)\.vcxproj/\1/')
+  if [ -d "${ROOTDIR}/UnitTest/" ]; then
+    OLDUNITTEST_NAME=$(find "${ROOTDIR}/UnitTest/" -maxdepth 1 -iname '*.vcxproj' | perl -pe 's/.*\b(\w+)\.vcxproj/\1/')
+  else
+    OLDUNITTEST_NAME="${1}Test"
+  fi
+  cat <<EOF
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "${MAIN_NAME}", "${MAIN_NAME}.vcxproj", "{${PROJ_MAIN_UUID}}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "${OLDUNITTEST_NAME}", "..\\UnitTest\\${OLDUNITTEST_NAME}.vcxproj", "{${PROJ_OLDUNITTEST_UUID}}"
+	ProjectSection(ProjectDependencies) = postProject
+		{${PROJ_MAIN_UUID}} = {${PROJ_MAIN_UUID}}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "${1}UnitTest2", "..\\UnitTest2\\${1}UnitTest2.vcxproj", "{${PROJ_UNITTEST2_UUID}}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		FOO Debug|Win32 = FOO Debug|Win32
+		FOO Release|Win32 = FOO Release|Win32
+		FOO UnitTest2 Debug|Win32 = FOO UnitTest2 Debug|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{${PROJ_MAIN_UUID}}.FOO Debug|Win32.ActiveCfg = FOO Debug|Win32
+		{${PROJ_MAIN_UUID}}.FOO Debug|Win32.Build.0 = FOO Debug|Win32
+		{${PROJ_MAIN_UUID}}.FOO Release|Win32.ActiveCfg = FOO Release|Win32
+		{${PROJ_MAIN_UUID}}.FOO Release|Win32.Build.0 = FOO Release|Win32
+		{${PROJ_MAIN_UUID}}.FOO UnitTest2 Debug|Win32.ActiveCfg = FOO Debug|Win32
+		{${PROJ_OLDUNITTEST_UUID}}.FOO Debug|Win32.ActiveCfg = FOO Debug|Win32
+		{${PROJ_OLDUNITTEST_UUID}}.FOO Debug|Win32.Build.0 = FOO Debug|Win32
+		{${PROJ_OLDUNITTEST_UUID}}.FOO Release|Win32.ActiveCfg = FOO Release|Win32
+		{${PROJ_OLDUNITTEST_UUID}}.FOO Release|Win32.Build.0 = FOO Release|Win32
+		{${PROJ_OLDUNITTEST_UUID}}.FOO UnitTest2 Debug|Win32.ActiveCfg = FOO Debug|Win32
+		{${PROJ_UNITTEST2_UUID}}.FOO Debug|Win32.ActiveCfg = FOO Debug|Win32
+		{${PROJ_UNITTEST2_UUID}}.FOO Debug|Win32.Build.0 = FOO Debug|Win32
+		{${PROJ_UNITTEST2_UUID}}.FOO Release|Win32.ActiveCfg = FOO Release|Win32
+		{${PROJ_UNITTEST2_UUID}}.FOO Release|Win32.Build.0 = FOO Release|Win32
+		{${PROJ_UNITTEST2_UUID}}.FOO UnitTest2 Debug|Win32.ActiveCfg = FOO Debug|Win32
+		{${PROJ_UNITTEST2_UUID}}.FOO UnitTest2 Debug|Win32.Build.0 = FOO Debug|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
+EOF
+}
+
+# $1 = project file name
+function print_project_filters()
+{
+  perl -ne 'if (/<Filter\s+Include="([^"]*)">/) {print "$1\n"}' "$1"
+}
+
+# inserts filter if it does not already exist
+# $1 = filter name
+# $2 = project filters file name
+function insert_filter()
+{
+  perl -e '
+    my $filtername = shift;
+    my $uuid = shift;
+
+    while (($_=<>) && !m@<Filter Include="TestHelpers">@) { print }
+    print;
+    while (($_=<>) && !m@</Filter>@) { print }
+    print;
+
+    print "    <Filter Include=\"Tests\\$filtername\">\r\n";
+    print "      <UniqueIdentifier>{$uuid}</UniqueIdentifier>\r\n";
+    print "    </Filter>\r\n";
+
+    while ($_=<>) { print }' "$1" "$(uuidgen)" "$2"
+}
+
+# possibly relative, can also be absolute
+ROOTDIRREL=${1:-$PWD}
+if [ ! -d "$ROOTDIRREL" ] ; then
+  echo "Directory '$ROOTDIRREL' does not exist"
+  exit 1
+fi
+
+SRCDIR="/w/DieBonder/PC/UnitTests/PC-UnitTest/Templates/UnitTest2"
+ROOTDIR=$(readlink -f "${ROOTDIRREL}") # get absolute path (opposed to relative)
+DSTDIR="$ROOTDIR/UnitTest2"
+PROJ_BASE_NAME="${ROOTDIR##*/}" 
+
+set -o noclobber
+mkdir -p "$DSTDIR"
+cp -n "$SRCDIR/MyProjectUnitTest2.vcxproj"         "$DSTDIR/${PROJ_BASE_NAME}UnitTest2.vcxproj"
+cp -n "$SRCDIR/MyProjectUnitTest2.vcxproj.filters" "$DSTDIR/${PROJ_BASE_NAME}UnitTest2.vcxproj.filters"
+cp -n "$SRCDIR/StdAfx."{cpp,h}                     "$DSTDIR"
+sln_gen ${PROJ_BASE_NAME} >"$DSTDIR/../Sources/${PROJ_BASE_NAME}.sln"
+
+insert_filter "geil" "$DSTDIR/${PROJ_BASE_NAME}UnitTest2.vcxproj.filters"
