@@ -1,41 +1,145 @@
 #!/usr/bin/perl -w
-my $pocket = 1_000;
-my $win_sum = 0;
+# play roulette with the martingale betting system
+
+# todo: meta - martingale:
+# - how long in average can you play until you are busted
+# - what is the average income per round / hour (while winning / overall)
+# - stop after n rounds - to simulate that real rounds are 'long' and no person will play millions of rounds
+# - this willl show how many person successfully played maringale in their live, and how many lost all their wealth  
+
+
+# config / strategies
+# ----------------------------------------
+my $start_cash = 10_000;
+
+# 0 = random
+# 1 = bet on the same color that has a winning strike (aka won before)
+# 2 = bet on the oposoite color as above
+my $betting_strategy = 0;
+
+# 0 = martingale
+my $betting_amount_strategy = 0;
+
+# Only for martingale: actually the rules are to double the bet after a loss.
+# But if you don't have enough cash to double? continue and bet all you have, or stop playing.
+my $continue_when_cant_double_bet = 1;
+
+# bank's imposed betting limit / highest possible bet. 0 for no limit
+my $bank_betting_limit = 100_000;
+
+# an expression evaluating to false (e.g. empty string) for none
+my $log_file = "roulette.csv"; 
+
+# maximal number of rounds played. To simulate that no human player will play
+# millions of rounds in his life. 0 for unlimited
+my $max_rounds = 10000; #60*10*2*52*10;
+# --------------------------------------------------
+
+
+use File::Spec;
+
+# internas
+my $cash = $start_cash;
 my $bet = 1;
-my $round = 0;
-my $max_pocket = $pocket;
-my $strike = 0;  
+my $round = 0; # 1 round = 1 bet, aka 1 'turning the wheel' 
+my $max_cash = $cash;
+my $strike = 0;	# number of rounds with same (win or loose) outcome
 my $has_won = 0;
 my $old_has_won = 0;
+my $strike_loss = 0; # money loss in a row, sum of consequtive losses
+my $max_strike_loss = 0;
+my $bank_betting_limit_hits = 0;
 
-while ( $bet < $pocket ) {
+# gnuplot: plot "roulette.csv" using 1:2 with line
+open LOG, (">" . ($log_file || File::Spec->devnull())) or die "Cant open '$log_file' for writting";
+print LOG "#round\tcash before\tbet\twin\tcash after\nav. loss per round";
+
+while ( $bet<=$cash && $cash>0 && ($max_rounds==0 || $max_rounds>$round) ) {
   $round++;
-  
-  # bet
-  $pocket -= $bet;
-  
-  # weehl is turning
+
+  $old_cash = $cash;
+  $old_bet = $bet;
   $old_has_won = $has_won;
-  $has_won = (18 <= rand(37));
+
+  # pay bet
+  $cash -= $bet;
   
-  # outcome
+  # let's gamble - turn the wheel !!
+	$winning_number = int(rand(37)); # number between 0 and 36 (both incl.)
+	if ($betting_strategy==0) {
+		$has_won = $winning_number >= 19; # 0 is bank, [19-36] our bet, [1-18] the rest
+	} else {
+		die "betting strategy $betting_strategy not implemented"
+	}
+
+  # won
   if ($has_won) {
-    $pocket += $bet * 2;
-    if ($pocket>$max_pocket) {
-      $max_pocket = $pocket;
-    }
-    $win_sum += 1;
-    $bet = 1;
+		$strike_loss = 0;
+		$cash += $bet * 2;
+		if ($cash>$max_cash) {
+			$max_cash = $cash;
+		}
   }
-  else {
-    $bet *= 2;
+
+	# lost
+	else {
+		$strike_loss += $bet;
+		if ($strike_loss>$max_strike_loss) {
+			$max_strike_loss=$strike_loss;
+		} 
   } 
-  if ( $old_has_won == $has_won ) {
-    $strike++;
-  }
-  else {
-    $strike = 0;
-  }
+
+	# stats
+	$av_loss_per_round = - ($cash - $start_cash) / $round;
+	$strike = ($old_has_won == $has_won) ? $strike+1 : 1;
+
+	# calculate bet of next round
+	if ($betting_amount_strategy==0) {
+		$bet = $has_won ? 1 : $bet * 2;
+	} else {
+		die "betting amount strategy $betting_amount_strategy not implemented"
+	}
+	# possibly adjust bet
+	if (($bet > $cash) && $continue_when_cant_double_bet) {
+		$bet = $cash;
+	} 
+	if ($bank_betting_limit!=0 && $bet>$bank_betting_limit) {
+		$bet = $bank_betting_limit;
+		$bank_betting_limit_hits += 1;
+	} 
+
+	# log
+	print LOG "$round\t$old_cash\t$old_bet\t$has_won\t$cash\n$av_loss_per_round";
 }
 
-print "lost all money after $round rounds. Bad luck for $strike rounds. Max pocket was $max_pocket\n";
+# print outcome
+$loss = $start_cash - $cash;
+$win = -$loss;
+if ( $max_rounds!=0 && $max_rounds==$round ) {
+	print "Yess, I played all my life without being forced to stop\n";
+	print "My cash is now $cash. Started with $start_cash, ";
+	if ($loss >= 0) {
+		print "so I lost $loss.\n";
+	} else {
+		print "so I won $win.\n";
+	}
+} else {
+	print "Lost $strike rounds in a row, ";
+	if ( $cash==0 ) {
+		print "lost ALL my money, I'm completly bancrupt now.\n";
+	} else {
+		print "can't continue to play.\n";
+		print "Would now need to bet $bet, but I have only $cash left.\n";
+		print "My cash is now $cash. Started with $start_cash, ";
+		if ($loss >= 0) {
+			print "so I lost $loss.\n";
+		} else {
+			print "so I at least won $win.\n";
+		}
+	}
+}
+print "Played $round rounds. Max cash was $max_cash. Max loss in a row $max_strike_loss\n";
+print "Overall, the average loss per round was $av_loss_per_round\n";
+if ($bank_betting_limit>0) {
+	print "Bank's betting limit of $bank_betting_limit was hit $bank_betting_limit_hits times\n";
+} 
