@@ -1,5 +1,25 @@
 #!/bin/bash
-# echo "cmd name: '$0'"
+# 
+# NAME
+#   aecho - Displays arguments explicitely
+# 
+# SYNOPSYS
+#   aecho [ARGUMENTS]...
+# 
+# DESCRIPTION
+#   All arguments are printed explicitely.   
+#
+# EXAMPLE
+#   The following 
+# 
+#     aecho lorem "ipsum dolor"
+# 
+#   prints
+#
+#     arg 1: 'lorem'
+#     arg 2: 'ipsum dolor'
+# 
+
 N=1
 for a in "$@"; do
   echo "arg $N: '$a'"
