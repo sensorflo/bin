@@ -1,9 +1,10 @@
 #!/bin/bash
 # Harmonizes all these dates: file modification data, all dates in the exiv
 # meta data.
-ALL_EXIF_DATES=$(exiftool -T -alldates) "$@"
-filedate  # modify?
-if not all dates equal
-  print all dates
-  exit
   
+find -maxdepth 1 -type f |
+  while read f ; do
+    d=$(perl -pe 's/^.*?([0-9]{8})T([0-9]{4})([0-9]{2}).*$/\1\2.\3/x' <<< "$f" )
+    touch "$f" -t "$d" ;
+    exiftool -P -overwrite_original '-FileModifyDate>AllDates' "$f"
+  done
