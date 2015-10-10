@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# Demonstrates that Git references are really simple:
+# - The (fully qualified) name of a reference is the path of a file
+# - The content of that file is the content of the reference, which is either
+#   * the id of an Git object
+#   * the (fully qualified) name of an reference
+
+if [ -d .git ]; then
+  cd .git
+fi
+
+{ find refs -type f; ls *HEAD; } |
+  grep -v FETCH_HEAD | # is actually not a single ref but a collection of refs
+  while read refname; do
+    echo -n "$refname: "
+    cat "$refname"
+  done

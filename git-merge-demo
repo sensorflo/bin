@@ -1,0 +1,23 @@
+#!/bin/bash
+. git_common_demo
+gdr "git init"
+gdr "echo hello >main.cpp"
+gdr "git add main.cpp"
+gdr "git commit -m 'initial commit'"
+gdr "echo world >>main.cpp"
+gdr "git commit -am 'added world'"
+gdr "git checkout -b featureX master^" \
+    "I.e. create and checkout a new branch pointing to the first parent of master"
+gdr "echo switzerland >> main.cpp"
+gdr "git commit -am 'added switzerland'"
+gdr "git checkout master"
+gdr "git merge featureX" \
+    "$MSG_CONFLICT"
+gdr "echo $'hello\nworld and switzerland' >main.cpp" \
+    "$MSG_RESOLVE_CONFLICT"
+gdr "git add main.cpp" \
+    "$MSG_RESOLVED_CONFLICTS"
+gdr "git commit -m 'merge branch featureX into master'" \
+    "After resolving all conflicts, commit as usal"
+gdr "git branch -d featureX"
+

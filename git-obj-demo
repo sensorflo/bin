@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Demonstrates that Git objects are really simple:
+# - From the id of an object directly follows the name of the file storing its
+#   content (if it's a loose object, i.e. not a packed object).
+
+if [ -d .git ]; then
+  cd .git
+fi
+
+function replace_non_printable {
+  # make 0x00 a newline (because thats pretty since the obj type is separated
+  # from the actual content by 0x00) and all other non-printable an '?'
+  perl -pe 's/\x00/\n/g; s/[^[:print:]](?<=\V)/?/g'
+}
+
+find objects -type f |
+  while read objectIdAsPath; do
+    echo "$objectIdAsPath"
+    echo "================================================="
+    zlib-flate -uncompress <"$objectIdAsPath" | replace_non_printable
+    echo -e "\n-------------------------------------------------"
+    echo
+    echo
+  done
+
+

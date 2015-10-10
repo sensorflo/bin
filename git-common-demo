@@ -1,0 +1,29 @@
+#!/bin/bash
+
+git_draw_options="-i --hide-reflogs"
+
+# git draw record. Evaluates $1 and then calls git-draw to record the current
+# state in a drawing. $2 is an optional additional message appended to the title
+# of the drawing.
+function gdr() {
+  eval "$1"
+  git-draw $git_draw_options --title "$1"$'\n'"$2"
+}
+
+if [ -d .git ] ; then
+  echo "There exists already a git repository. Remove it first."
+  exit 1
+fi
+rm -rf git-draw*
+
+MSG_CONFLICT=$'Git reports that there where conflicts.\nThe conflicted files now have 3 versions (1=common base 2=HEAD 3=MERGE_HEAD) in the index.\nThe conflicted working tree files contain conflict markers'
+MSG_RESOLVE_CONFLICT="Manually resolve conflicts by editing conflicted files, potentially via an merge tool, e.g. via \"git mergetool\""
+MSG_RESOLVED_CONFLICTS=$'To tell Git that you resolved the conflicts of a conflicted file, add it to the index.\nIf you resolved the conflicts via "git mergetool", that happened automatically.'
+
+# todo in git-draw: allow that no git repo yet exists
+# git-draw $git_draw_options --title "initial state"
+
+# todo: on first slide, repeat the few important building blocks of git
+
+# todo: move 'git init' into here, and then abort if any non ignored files exist
+
