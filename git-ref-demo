@@ -1,18 +1,32 @@
 #!/bin/bash
 
-# Demonstrates that Git references are really simple:
-# - The (fully qualified) name of a reference is the path of a file
-# - The content of that file is the content of the reference, which is either
-#   * the id of an Git object
-#   * the (fully qualified) name of an reference
+cat <<EOF
+Demonstrates that Git references are really simple:
+- The (fully qualified) name of a reference is the path of a file (ignoring
+  packed references).
+- The content of that file is the content of the reference, which is either
+  - the id of an Git object
+  - the (fully qualified) name of an reference
+
+EOF
+
+if ! which tree >/dev/null; then
+  echo "Command 'tree' not found. If you have apt: sudo apt-get install tree" >2
+  exit 1
+fi
 
 if [ -d .git ]; then
   cd .git
 fi
 
+echo "Reference related files (ignoring packed refs) in the .git directory:"
+tree --noreport refs
+ls -1 *HEAD
+echo
+
 { find refs -type f; ls *HEAD; } |
   grep -v FETCH_HEAD | # is actually not a single ref but a collection of refs
   while read refname; do
-    echo -n "$refname: "
+    echo -n "Content of file $refname: "
     cat "$refname"
   done

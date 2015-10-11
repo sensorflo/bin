@@ -1,27 +1,46 @@
 #!/bin/bash
 
-# Demonstrates that Git objects are really simple:
-# - From the id of an object directly follows the name of the file storing its
-#   content (if it's a loose object, i.e. not a packed object).
+cat <<EOF
+Demonstrates that Git objects are really simple:
+- From the id of an object directly follows the name of the file storing its
+  content (ignoring packed objects).
+- The decompressed (deflate) file content is the content of the object, which
+  is for all object types to an large extend human readable text.
+
+
+EOF
+
+# make 0x00 a newline (because that's pretty since the object type is
+# separated from the actual content by an 0x00) and all other non-printable an
+# '?'.
+function replace_non_printable_chars {
+  perl -pe 's/\x00/\n/g; s/[^[:print:]](?<=\V)/?/g'
+}
+
+if ! which tree >/dev/null; then
+  echo "Command 'tree' not found. If you have apt: sudo apt-get install tree" >2
+  exit 1
+fi
+if ! which zlib-flate >/dev/null; then
+  echo "Command 'zlib-flate' not found. If you have apt: sudo apt-get install zlib" >2
+  exit 1
+fi
 
 if [ -d .git ]; then
   cd .git
 fi
 
-function replace_non_printable {
-  # make 0x00 a newline (because thats pretty since the obj type is separated
-  # from the actual content by 0x00) and all other non-printable an '?'
-  perl -pe 's/\x00/\n/g; s/[^[:print:]](?<=\V)/?/g'
-}
+echo "Object related files in the .git directory:"
+tree --noreport objects
+echo
+echo
 
-find objects -type f |
+find objects -type f -regex 'objects/[0-9a-f][0-9a-f]/.*' |
   while read objectIdAsPath; do
-    echo "$objectIdAsPath"
-    echo "================================================="
-    zlib-flate -uncompress <"$objectIdAsPath" | replace_non_printable
-    echo -e "\n-------------------------------------------------"
+    echo "Content of file $objectIdAsPath"
+    echo "================================================================="
+    zlib-flate -uncompress <"$objectIdAsPath" | replace_non_printable_chars
+    echo -e "\n-----------------------------------------------------------------"
     echo
     echo
   done
-
-
