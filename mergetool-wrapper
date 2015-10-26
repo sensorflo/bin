@@ -1,11 +1,23 @@
 #!/bin/bash
+# - makes all files except $MERGED readonly
+# - makes git always ask whether the merge was successfull (precondition:
+#   mergetool.<tool>.trustExitCode is set to false)
+
+function mergetool {
+  meld --diff "$LOCAL" "$MERGED" "$REMOTE" \
+     --diff "$LOCAL" "$MERGED" \
+     --diff "$BASE" "$REMOTE" \
+     --diff "$MERGED" "$REMOTE" \
+     --diff "$LOCAL" "$BASE"
+}
+
 BASE="$1"
 LOCAL="$2"
 REMOTE="$3"
 MERGED="$4"
+
+MERGED_TIMESTAMP=$(stat -c "%Y" "$MERGED")
 chmod a-w "$BASE" "$LOCAL" "$REMOTE"
-meld --diff "$LOCAL" "$MERGED" "$REMOTE" \
-     --diff "$LOCAL" "$MERGED" \
-     --diff "$BASE" "$REMOTE" \
-     --diff "$MERGED" "$REMOTE" \
-     --diff "$BASE" "$LOCAL"
+mergetool
+touch -d "@$MERGED_TIMESTAMP" "$MERGED"
+exit 0
