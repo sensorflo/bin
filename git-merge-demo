@@ -1,5 +1,5 @@
 #!/bin/bash
-. git_common_demo
+. git-common-demo
 gdr "git init"
 gdr "echo hello >main.cpp"
 gdr "git add main.cpp"
