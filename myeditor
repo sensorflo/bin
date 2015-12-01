@@ -1,0 +1,5 @@
+#!/bin/bash
+# The purpose of this script is having a command that can be started without
+# arguments. A use case is as argument to emacsclient's option
+# --alternate-editor
+emacs -nw -Q
