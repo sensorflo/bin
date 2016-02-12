@@ -1,0 +1,2 @@
+#!/bin/bash
+"$@" && git-draw -i --hide-reflogs --title "$(echo $@)"
