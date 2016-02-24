@@ -1,12 +1,12 @@
 #!/usr/bin/python
-# 
+#
 # NAME
 #   aecho - Displays arguments explicitely
-# 
+#
 #
 # SYNOPSYS
 #   aecho [ARGUMENTS]...
-# 
+#
 #
 # DESCRIPTION
 #   All arguments are printed explicitely. In contrast to vanilla echo, that
@@ -22,7 +22,7 @@
 #     an error.
 #
 #   AES
-#     aecho separator. Printed between argument templates. 
+#     aecho separator. Printed between argument templates.
 #
 #   AED
 #     aecho delimiter. Printed after the last argument template.
@@ -30,14 +30,14 @@
 #
 # EXAMPLES
 #   The following assumes a POSIX shell.
-# 
+#
 #   aecho lorem "ipsum dolor"
 #     prints:
 #       arg 0: '/usr/bin/aecho'
 #       arg 1: 'lorem'
 #       arg 2: 'ipsum dolor'
-# 
-# 
+#
+#
 #   AET="|%a| is arg %i" AES=", " AED="$" aecho hello world
 #     prints:
 #       |/usr/bin/aecho| is arg 0, |hello| is arg 1, |world| is arg 2$
