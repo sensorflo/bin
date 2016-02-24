@@ -1,0 +1,5 @@
+#!/bin/bash
+PERF_DATA_FN="${1:-perf.data}"
+perf script -i "$PERF_DATA_FN" >"${PERF_DATA_FN}.txt"
+~/bin/FlameGraph/stackcollapse-perf.pl "${PERF_DATA_FN}.txt" >"${PERF_DATA_FN}_folded.txt"
+~/bin/FlameGraph/flamegraph.pl "${PERF_DATA_FN}_folded.txt" >"${PERF_DATA_FN}.svg"
