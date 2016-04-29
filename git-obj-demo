@@ -1,7 +1,9 @@
 #!/bin/bash
 
+. ansi_escape_codes
+
+echo -e "${BWhi}Demonstrates that Git objects are really simple:${RCol}"
 cat <<EOF
-Demonstrates that Git objects are really simple:
 - From the id of an object directly follows the name of the file storing its
   content (ignoring packed objects).
 - The decompressed (deflate) file content is the content of the object, which
@@ -30,17 +32,15 @@ if [ -d .git ]; then
   cd .git
 fi
 
-echo "Object related files in the .git directory:"
-tree --noreport objects
+echo -e "${BWhi}Filetree of Git object related files in the .git directory:${RCol}"
+tree -n --noreport objects
 echo
 echo
 
+echo -e "${BWhi}Decompressed content of these files:${RCol}"
 find objects -type f -regex 'objects/[0-9a-f][0-9a-f]/.*' |
   while read objectIdAsPath; do
-    echo "Content of file $objectIdAsPath"
-    echo "================================================================="
+    echo -e "${Blu}file $objectIdAsPath:${RCol}"
     zlib-flate -uncompress <"$objectIdAsPath" | replace_non_printable_chars
-    echo -e "\n-----------------------------------------------------------------"
-    echo
     echo
   done
