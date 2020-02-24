@@ -13,11 +13,6 @@
 #   in <merged>, and the second window is about seeing the two changes <base>
 #   -> <local> and <base> -> <remote>.
 #
-#   Makes all files except <merged> readonly before running meld, WITHOUT
-#   returning them back to their previous file mode after this script
-#   exits. The intention is that the user does not accidentally change these
-#   files because he confused which file is which in the merge tool.
-#
 #   The returned exit code is undefined.
 
 
@@ -26,13 +21,12 @@ LOCAL="$2"
 REMOTE="$3"
 MERGED="$4"
 
-chmod a-w "$BASE" "$LOCAL" "$REMOTE"
-
-meld "$LOCAL" "$MERGED" "$REMOTE" \
-  --diff "$LOCAL" "$MERGED" \
-  --diff "$MERGED" "$REMOTE" &
-PID1=$!
 meld --diff "$BASE" "$REMOTE" \
-  --diff "$LOCAL" "$BASE" &
+     --diff "$BASE" "$LOCAL" &
 PID2=$!
+
+meld --diff "$LOCAL" "$MERGED" \
+     --diff "$REMOTE" "$MERGED" &
+PID1=$!
+
 wait $PID1 $PID2
