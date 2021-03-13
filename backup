@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# backup - Backups my data; pushes all repositories to backup servers
+
+function git-is-working-tree-dirty () (
+  cd "$1"
+  test -n "$(git status --porcelain)" 
+)
+
+ROOTS=~
+if [ -d "/media/sensorflo/My\ Passport" ]; then
+  ROOTS+=" /media/sensorflo/My\ Passport"
+fi
+for repo in $(find $ROOTS -iname ".git" ); do
+  if git-is-working-tree-dirty "$(dirname "$repo")"; then
+    echo "Is dirty: $repo"
+  fi
+done
+
+
+# use "find ~ (/media/sensorflo/My Passport/ without the bak folder) -type d -iname .git" to find all my current repos: 
+#   bin/.git
+#   Books/.git
+#   src/git-draw/wiki/.git
+#   src/git-draw/.git
+#   src/flodoc/.git
+#   src/testgit/.git
+#   src/git/.git
+#   src/proj-depend-gen/.git
+#   src/cppkoans/.git
+#   src/ef/.git
+#   src/ef2/.git
+#   src/testdox/.git
+#   src/cppcheck/.git
+#   .emacs.d/bin/.git
+#   .emacs.d/.git
+#   .emacs.d/misc/multiple-cursors/.git
+#   .emacs.d/progmodes/cppkoans-mode/.git
+#   .emacs.d/textmodes/mediawiki/.git
+#   Documents/knowledge/.git
+#   Documents/knowledge/yasmala/.git
+#   Documents/.git
+#   /media/sensorflo/My Passport/Pictures/.git
+#
+# Foreign projects I am also working on
+#   src/gmock/.git
+#   src/gmock/gtest/.git
+# 
+# But exclude some I am not really working on (auto dedect (look at push-able
+# commits relative to origin)) and explicitly stated):
+#   src/llvm/tools/clang/.git
+#   src/llvm/.git
+#   src/llvm/projects/compiler-rt/.git
+#   src/llvm/projects/test-suite/.git
+#   src/libcxx/.git
+#   src/glibc/.git
+#   src/zlib/.git
+#   src/openssl/.git
+#   src/python_koans/.git
+#   src/bash/.git
+
