@@ -1,0 +1,14 @@
+#!/bin/sh
+
+git diff >> unstaged.patch
+git diff --cached >> staged.patch
+
+git reset --hard
+git apply unstaged.patch
+
+git add -A
+git reset -- staged.patch unstaged.patch
+
+git apply staged.patch
+
+rm staged.patch unstaged.patch
