@@ -1,0 +1,7 @@
+#!/bin/bash
+find -iregex '.*-.*-_DSC.*' | 
+	perl -ne '
+		chomp;
+		my $orig = $_;
+        s/^.*-(.*-_DSC.*)$/\1/;
+		system("mv $orig $_\n")'

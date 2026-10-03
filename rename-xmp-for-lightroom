@@ -1,0 +1,6 @@
+#!/bin/bash
+ls *.xmp | 
+	perl -ne '
+		chomp;
+		my $orig = $_; s/^(.*)\.\w+\.xmp$/\1.xmp/i;
+		system("mv $orig $_\n")'

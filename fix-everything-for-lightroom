@@ -1,0 +1,4 @@
+#!/bin/bash
+rename-xmp-for-lightroom
+find -iname '*.xmp' | 
+	xargs fix-xmp-for-lightroom

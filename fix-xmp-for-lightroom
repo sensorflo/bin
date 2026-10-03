@@ -1,0 +1,4 @@
+#!/bin/perl -pi
+s/\bxmp:Rating="0"/xmp:Rating="1"/;
+s/\bxmp:Rating="-1"/xmp:Rating="0"/;
+s/\bxmpMM:DerivedFrom=".*-(_?DSC\w*).ARW"/xmpMM:DerivedFrom="$1.ARW"/;

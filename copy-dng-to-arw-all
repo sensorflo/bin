@@ -1,0 +1,2 @@
+#!/bin/bash
+ls *.dng.xmp | xargs -n 1 copy-dng-to-arw.pl
