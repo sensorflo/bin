@@ -2,8 +2,6 @@ R"""Back up my home folder and SD card with restic.
 
 Ensure Defender is turned off, or at least that restic.exe and the backup folder
 are excluded from scanning.
-
-To check what actually ends up in the backup, run backup_audit.py.
 """
 # For usage, run with --help
 
