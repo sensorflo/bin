@@ -10,6 +10,7 @@ import enum
 import functools
 import json
 import os
+import stat
 import string
 import subprocess
 import sys
@@ -104,9 +105,19 @@ def chunker_polynomial(repo):
     return json.loads(config)["chunker_polynomial"]
 
 
+def copy_script_to_repo_drive():
+    source = Path(__file__).resolve()
+    target = Path(Path(repo_path()).anchor, source.name)
+    if target.exists():
+        target.chmod(stat.S_IWRITE)
+    target.write_text(f"# This is a copy of {source}\n" + source.read_text(encoding="utf-8"), encoding="utf-8")
+    target.chmod(stat.S_IREAD)
+
+
 def restic_init():
     if Path(repo_path()).exists():
         sys.exit(f"Not initializing: {repo_path()} already exists.")
+    copy_script_to_repo_drive()
     print(f"Initializing new restic repository at {repo_path()}")
     return restic("init", "--compression", "off")
 
@@ -116,6 +127,7 @@ def restic_backup():
     if not Path(SD_MARKER_PATH).exists():
         sys.exit(f"SD card not found: {SD_MARKER_PATH} is missing (card not inserted, or a different "
                  "drive letter?). Not backing up, since the snapshot would be incomplete.")
+    copy_script_to_repo_drive()
     print(f"Starting backup of {', '.join(SOURCE_PATHS)} ...")
     excludes = [f"--iexclude={pattern}" for pattern in EXCLUDES]
     return restic("backup", *SOURCE_PATHS, *excludes, "--compression", "off", "--verbose")
