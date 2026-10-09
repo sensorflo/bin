@@ -9,6 +9,9 @@ To check what actually ends up in the backup, run backup_audit.py.
 
 import argparse
 import enum
+import functools
+import os
+import string
 import subprocess
 import sys
 from pathlib import Path
@@ -20,7 +23,9 @@ SOURCE_PATHS = [
     R"C:\Users\Senso",
     "S:\\",
 ]
-REPO_PATH = R"E:\Backup\restic-backup-dell-xps-15-home-folder"
+# The repo lives on whichever drive has a REPO_MARKER_NAME file in its root.
+REPO_MARKER_NAME = ".backup-destination"
+REPO_DIR = R"Backup\restic-backup-dell-xps-15-home-folder"
 
 # Case-insensitive restic exclude patterns (--iexclude).
 EXCLUDES = [
@@ -56,25 +61,31 @@ EXCLUDES = [
     R"S:\$RECYCLE.BIN\**",
 ]
 
-# Options every restic command gets
-COMMON_RESTIC_ARGS = ["--repo", REPO_PATH, "--insecure-no-password"]
+@functools.cache
+def repo_path():
+    drives = [f"{drive_letter}:\\" for drive_letter in string.ascii_uppercase
+              if os.path.exists(f"{drive_letter}:\\{REPO_MARKER_NAME}")]
+    if len(drives) != 1:
+        sys.exit(f"Expected exactly one drive with a {REPO_MARKER_NAME} file in its root, "
+                 f"found: {', '.join(drives) or 'none'}")
+    return drives[0] + REPO_DIR
 
 
 def restic(*args):
     """Run restic with the given arguments, return its exit code."""
-    return subprocess.run(["restic", *args, *COMMON_RESTIC_ARGS]).returncode
+    return subprocess.run(["restic", *args, "--repo", repo_path(), "--insecure-no-password"]).returncode
 
 
 def restic_init():
-    if Path(REPO_PATH).exists():
-        sys.exit(f"Not initializing: {REPO_PATH} already exists.")
-    print(f"Initializing new restic repository at {REPO_PATH}")
+    if Path(repo_path()).exists():
+        sys.exit(f"Not initializing: {repo_path()} already exists.")
+    print(f"Initializing new restic repository at {repo_path()}")
     return restic("init", "--compression", "off")
 
 
 def restic_backup():
-    if not (Path(REPO_PATH) / "config").exists():
-        sys.exit(f"No restic repository at {REPO_PATH} (wrong drive mapped to E:?). "
+    if not (Path(repo_path()) / "config").exists():
+        sys.exit(f"No restic repository at {repo_path()}. "
                  "To create a new one: python backup.py --init")
     if not Path(SD_MARKER_PATH).exists():
         sys.exit(f"SD card not found: {SD_MARKER_PATH} is missing (card not inserted, or a different "
@@ -97,7 +108,7 @@ class StoreResticArgs(argparse.Action):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, epilog=f"Repository: {REPO_PATH}",
+    parser = argparse.ArgumentParser(description=__doc__, epilog=f"Repository: <drive with {REPO_MARKER_NAME}>{REPO_DIR}",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--backup", dest="action", action="store_const", const=Action.BACKUP,
