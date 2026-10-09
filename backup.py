@@ -188,8 +188,7 @@ def backup_git_repo(git_repo, remote):
     refspecs += [f":{ref}" for ref in existing if ref not in wanted]
     if not refspecs:
         return "up to date"
-    # git(git_repo, "push", "--quiet", remote, *refspecs)
-    print(git(git_repo, "push", "--dry-run", "--porcelain", remote, *refspecs))
+    git(git_repo, "push", "--quiet", remote, *refspecs)
     return f"{len(refspecs)} backup branches updated"
 
 
