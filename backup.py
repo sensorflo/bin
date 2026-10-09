@@ -8,6 +8,7 @@ are excluded from scanning.
 import argparse
 import enum
 import functools
+import json
 import os
 import string
 import subprocess
@@ -21,9 +22,13 @@ SOURCE_PATHS = [
     R"C:\Users\Senso",
     "S:\\",
 ]
-# The repo lives on whichever drive has a REPO_MARKER_NAME file in its root.
+# The primary repo. Unqualified 'repo' and 'backup' in this script always mean the primary one.
+# Each repo lives on whichever drive has its marker file in its root.
 REPO_MARKER_NAME = ".backup-destination"
 REPO_DIR = R"Backup\restic-backup-dell-xps-15-home-folder"
+# The secondary repo holds copies of the primary repo's snapshots (restic copy).
+SECONDARY_REPO_MARKER_NAME = ".backup-destination-secondary"
+SECONDARY_REPO_DIR = R"Backup\restic-backup-dell-xps-15-home-folder"
 
 # Case-insensitive restic exclude patterns (--iexclude).
 EXCLUDES = [
@@ -60,24 +65,43 @@ EXCLUDES = [
 ]
 
 @functools.cache
-def repo_path(exit_on_error=True):
+def find_repo_path(marker_name, repo_dir, exit_on_error=True):
     drive_letters = [drive_letter for drive_letter in string.ascii_uppercase
-                     if os.path.exists(f"{drive_letter}:\\{REPO_MARKER_NAME}")]
+                     if os.path.exists(f"{drive_letter}:\\{marker_name}")]
     if len(drive_letters) == 1:
-        return drive_letters[0] + ":\\" + REPO_DIR
+        return drive_letters[0] + ":\\" + repo_dir
     if exit_on_error:
-        sys.exit(f"Expected exactly one drive with a {REPO_MARKER_NAME} file in its root, "
+        sys.exit(f"Expected exactly one drive with a {marker_name} file in its root, "
                  f"found: {', '.join(drive_letters) or 'none'}")
     return None
 
 
-def repo_path_for_help():
-    return repo_path(exit_on_error=False) or f"<drive with {REPO_MARKER_NAME}>:\\{REPO_DIR}"
+def repo_path(exit_on_error=True):
+    return find_repo_path(REPO_MARKER_NAME, REPO_DIR, exit_on_error)
 
 
-def restic(*args):
-    """Run restic with the given arguments, return its exit code."""
-    return subprocess.run(["restic", *args, "--repo", repo_path(), "--insecure-no-password"]).returncode
+def secondary_repo_path(exit_on_error=True):
+    return find_repo_path(SECONDARY_REPO_MARKER_NAME, SECONDARY_REPO_DIR, exit_on_error)
+
+
+def path_for_help(marker_name, repo_dir):
+    return find_repo_path(marker_name, repo_dir, exit_on_error=False) or f"<drive with {marker_name}>:\\{repo_dir}"
+
+
+def restic(*args, repo=None):
+    """Run restic with the given arguments on repo (default: the primary repo), return its exit code."""
+    return subprocess.run(["restic", *args, "--repo", repo or repo_path(), "--insecure-no-password"]).returncode
+
+
+def require_repo(path, init_option):
+    if not (Path(path) / "config").exists():
+        sys.exit(f"No restic repository at {path}. To create a new one: python backup.py {init_option}")
+
+
+def chunker_polynomial(repo):
+    config = subprocess.run(["restic", "cat", "config", "--repo", repo, "--insecure-no-password"],
+                            capture_output=True, text=True, check=True).stdout
+    return json.loads(config)["chunker_polynomial"]
 
 
 def restic_init():
@@ -88,9 +112,7 @@ def restic_init():
 
 
 def restic_backup():
-    if not (Path(repo_path()) / "config").exists():
-        sys.exit(f"No restic repository at {repo_path()}. "
-                 "To create a new one: python backup.py --init")
+    require_repo(repo_path(), "--init")
     if not Path(SD_MARKER_PATH).exists():
         sys.exit(f"SD card not found: {SD_MARKER_PATH} is missing (card not inserted, or a different "
                  "drive letter?). Not backing up, since the snapshot would be incomplete.")
@@ -99,10 +121,33 @@ def restic_backup():
     return restic("backup", *SOURCE_PATHS, *excludes, "--compression", "off", "--verbose")
 
 
+def restic_init_secondary():
+    if Path(secondary_repo_path()).exists():
+        sys.exit(f"Not initializing: {secondary_repo_path()} already exists.")
+    require_repo(repo_path(), "--init")
+    print(f"Initializing new secondary restic repository at {secondary_repo_path()}, "
+          f"with the chunker parameters of {repo_path()}")
+    return restic("init", "--from-repo", repo_path(), "--from-insecure-no-password", "--copy-chunker-params",
+                  repo=secondary_repo_path())
+
+
+def restic_update_secondary():
+    require_repo(repo_path(), "--init")
+    require_repo(secondary_repo_path(), "--init-secondary")
+    if chunker_polynomial(repo_path()) != chunker_polynomial(secondary_repo_path()):
+        sys.exit(f"{secondary_repo_path()} has different chunker parameters than {repo_path()}, "
+                 "so copying would not deduplicate and inflate it. Recreate it with --init-secondary.")
+    print(f"Copying new snapshots from {repo_path()} to {secondary_repo_path()} ...")
+    return restic("copy", "--from-repo", repo_path(), "--from-insecure-no-password", "--compression", "off",
+                  repo=secondary_repo_path())
+
+
 class Action(enum.Enum):
     BACKUP = enum.auto()
     INIT = enum.auto()
     RESTIC = enum.auto()
+    INIT_SECONDARY = enum.auto()
+    UPDATE_SECONDARY = enum.auto()
 
 
 class StoreResticArgs(argparse.Action):
@@ -112,7 +157,8 @@ class StoreResticArgs(argparse.Action):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, epilog=f"Repository: {repo_path_for_help()}",
+    parser = argparse.ArgumentParser(description=__doc__, epilog=f"Repository: {path_for_help(REPO_MARKER_NAME, REPO_DIR)}\n"
+                                            f"Secondary repository: {path_for_help(SECONDARY_REPO_MARKER_NAME, SECONDARY_REPO_DIR)}",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--backup", dest="action", action="store_const", const=Action.BACKUP,
@@ -121,6 +167,10 @@ def main():
                        help="create a new, empty repo")
     group.add_argument("--restic", dest="action", action=StoreResticArgs, nargs=argparse.REMAINDER, metavar="ARGS",
                        help="run restic with the remaining ARGS")
+    group.add_argument("--init-secondary", dest="action", action="store_const", const=Action.INIT_SECONDARY,
+                       help="create a new, empty secondary repo with the primary repo's chunker parameters")
+    group.add_argument("--update-secondary", dest="action", action="store_const", const=Action.UPDATE_SECONDARY,
+                       help="copy snapshots missing in the secondary repo from the primary repo")
     parser.set_defaults(action=Action.BACKUP)
     args = parser.parse_args()
 
@@ -131,6 +181,10 @@ def main():
             exit_code = restic_init()
         case Action.RESTIC:
             exit_code = restic(*args.restic_args)
+        case Action.INIT_SECONDARY:
+            exit_code = restic_init_secondary()
+        case Action.UPDATE_SECONDARY:
+            exit_code = restic_update_secondary()
     sys.exit(exit_code)
 
 
