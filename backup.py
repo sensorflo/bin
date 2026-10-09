@@ -60,13 +60,19 @@ EXCLUDES = [
 ]
 
 @functools.cache
-def repo_path():
-    drives = [f"{drive_letter}:\\" for drive_letter in string.ascii_uppercase
-              if os.path.exists(f"{drive_letter}:\\{REPO_MARKER_NAME}")]
-    if len(drives) != 1:
+def repo_path(exit_on_error=True):
+    drive_letters = [drive_letter for drive_letter in string.ascii_uppercase
+                     if os.path.exists(f"{drive_letter}:\\{REPO_MARKER_NAME}")]
+    if len(drive_letters) == 1:
+        return drive_letters[0] + ":\\" + REPO_DIR
+    if exit_on_error:
         sys.exit(f"Expected exactly one drive with a {REPO_MARKER_NAME} file in its root, "
-                 f"found: {', '.join(drives) or 'none'}")
-    return drives[0] + ":\\" + REPO_DIR
+                 f"found: {', '.join(drive_letters) or 'none'}")
+    return None
+
+
+def repo_path_for_help():
+    return repo_path(exit_on_error=False) or f"<drive with {REPO_MARKER_NAME}>:\\{REPO_DIR}"
 
 
 def restic(*args):
@@ -106,7 +112,7 @@ class StoreResticArgs(argparse.Action):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, epilog=f"Repository: <drive with {REPO_MARKER_NAME}>:\\{REPO_DIR}",
+    parser = argparse.ArgumentParser(description=__doc__, epilog=f"Repository: {repo_path_for_help()}",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--backup", dest="action", action="store_const", const=Action.BACKUP,
