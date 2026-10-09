@@ -27,6 +27,8 @@ SOURCE_PATHS = [
 # Git repos below these folders get their branches, stashes and uncommitted changes pushed
 # to backup/<computer name>/... branches on their remote, if the remote is mine.
 GIT_SEARCH_ROOTS = [R"C:\Users\Senso\src", R"C:\Users\Senso\bin", R"C:\Users\Senso\Documents"]
+# Additional single git repos, whose subfolders are not searched for further git repos.
+GIT_REPOS = [R"C:\Users\Senso"]
 OWN_REMOTE_PREFIXES = (
     "https://github.com/sensorflo/", "git@github.com:sensorflo/",
     "https://gitlab.com/sensorflo1/", "git@gitlab.com:sensorflo1/",
@@ -191,20 +193,25 @@ def backup_git_repo(git_repo, remote):
     return f"{len(refspecs)} backup branches updated"
 
 
+def all_git_repos():
+    yield from (Path(git_repo) for git_repo in GIT_REPOS)
+    for root in GIT_SEARCH_ROOTS:
+        yield from find_git_repos(root)
+
+
 def backup_vcs():
     failed = []
-    for root in GIT_SEARCH_ROOTS:
-        for git_repo in find_git_repos(root):
-            if git_repo.name in GIT_REPOS_WITHOUT_OWN_REMOTE:
-                continue
-            try:
-                remote = own_remote(git_repo)
-                if remote is None:
-                    raise RuntimeError("no remote of mine, and not in GIT_REPOS_WITHOUT_OWN_REMOTE")
-                print(f"{git_repo}: {backup_git_repo(git_repo, remote)}")
-            except (RuntimeError, subprocess.CalledProcessError) as error:
-                failed.append(git_repo)
-                print(f"{git_repo}: FAILED: {getattr(error, 'stderr', None) or error}", file=sys.stderr)
+    for git_repo in all_git_repos():
+        if git_repo.name in GIT_REPOS_WITHOUT_OWN_REMOTE:
+            continue
+        try:
+            remote = own_remote(git_repo)
+            if remote is None:
+                raise RuntimeError("no remote of mine, and not in GIT_REPOS_WITHOUT_OWN_REMOTE")
+            print(f"{git_repo}: {backup_git_repo(git_repo, remote)}")
+        except (RuntimeError, subprocess.CalledProcessError) as error:
+            failed.append(git_repo)
+            print(f"{git_repo}: FAILED: {getattr(error, 'stderr', None) or error}", file=sys.stderr)
     if failed:
         print("Failed git repos:", *failed, sep="\n    ", file=sys.stderr)
     return 1 if failed else 0
