@@ -34,8 +34,7 @@ OWN_REMOTE_PREFIXES = (
 # Names of git repo folders that are skipped: either their remote isn't mine, or they have
 # intentionally no remote. Any other git repo without a remote of mine is an error.
 GIT_REPOS_WITHOUT_OWN_REMOTE = {
-    "cppfront", "googletest", "vcpkg",
-    "ef", "SyncArwDng", "console-application-gtest",
+    "cppfront", "googletest", "vcpkg", "SyncArwDng", "console-application-gtest",
 }
 
 # The primary repo. Unqualified 'repo' and 'backup' in this script always mean the primary one.
