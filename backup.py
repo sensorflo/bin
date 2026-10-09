@@ -105,9 +105,9 @@ def chunker_polynomial(repo):
     return json.loads(config)["chunker_polynomial"]
 
 
-def copy_script_to_repo_drive():
+def copy_script_to_drive_of(repo):
     source = Path(__file__).resolve()
-    target = Path(Path(repo_path()).anchor, source.name)
+    target = Path(Path(repo).anchor, source.name)
     if target.exists():
         target.chmod(stat.S_IWRITE)
     target.write_text(f"# This is a copy of {source}\n" + source.read_text(encoding="utf-8"), encoding="utf-8")
@@ -117,7 +117,7 @@ def copy_script_to_repo_drive():
 def restic_init():
     if Path(repo_path()).exists():
         sys.exit(f"Not initializing: {repo_path()} already exists.")
-    copy_script_to_repo_drive()
+    copy_script_to_drive_of(repo_path())
     print(f"Initializing new restic repository at {repo_path()}")
     return restic("init", "--compression", "off")
 
@@ -127,7 +127,7 @@ def restic_backup():
     if not Path(SD_MARKER_PATH).exists():
         sys.exit(f"SD card not found: {SD_MARKER_PATH} is missing (card not inserted, or a different "
                  "drive letter?). Not backing up, since the snapshot would be incomplete.")
-    copy_script_to_repo_drive()
+    copy_script_to_drive_of(repo_path())
     print(f"Starting backup of {', '.join(SOURCE_PATHS)} ...")
     excludes = [f"--iexclude={pattern}" for pattern in EXCLUDES]
     return restic("backup", *SOURCE_PATHS, *excludes, "--compression", "off", "--verbose")
@@ -137,6 +137,7 @@ def restic_init_secondary():
     if Path(secondary_repo_path()).exists():
         sys.exit(f"Not initializing: {secondary_repo_path()} already exists.")
     require_repo(repo_path(), "--init")
+    copy_script_to_drive_of(secondary_repo_path())
     print(f"Initializing new secondary restic repository at {secondary_repo_path()}, "
           f"with the chunker parameters of {repo_path()}")
     return restic("init", "--from-repo", repo_path(), "--from-insecure-no-password", "--copy-chunker-params",
@@ -149,9 +150,15 @@ def restic_update_secondary():
     if chunker_polynomial(repo_path()) != chunker_polynomial(secondary_repo_path()):
         sys.exit(f"{secondary_repo_path()} has different chunker parameters than {repo_path()}, "
                  "so copying would not deduplicate and inflate it. Recreate it with --init-secondary.")
+    copy_script_to_drive_of(secondary_repo_path())
     print(f"Copying new snapshots from {repo_path()} to {secondary_repo_path()} ...")
     return restic("copy", "--from-repo", repo_path(), "--from-insecure-no-password", "--compression", "off",
                   repo=secondary_repo_path())
+
+
+def restic_passthrough(restic_args):
+    copy_script_to_drive_of(repo_path())
+    return restic(*restic_args)
 
 
 class Action(enum.Enum):
@@ -192,7 +199,7 @@ def main():
         case Action.INIT:
             exit_code = restic_init()
         case Action.RESTIC:
-            exit_code = restic(*args.restic_args)
+            exit_code = restic_passthrough(args.restic_args)
         case Action.INIT_SECONDARY:
             exit_code = restic_init_secondary()
         case Action.UPDATE_SECONDARY:
