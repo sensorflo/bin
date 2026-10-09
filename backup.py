@@ -1,4 +1,4 @@
-R"""Back up my home folder and SD card with restic.
+R"""Back up my home folder and SD card with restic, and push my unpushed version-controlled work.
 
 Ensure Defender is turned off, or at least that restic.exe and the backup folder
 are excluded from scanning.
@@ -10,6 +10,7 @@ import enum
 import functools
 import json
 import os
+import platform
 import stat
 import string
 import subprocess
@@ -23,6 +24,14 @@ SOURCE_PATHS = [
     R"C:\Users\Senso",
     "S:\\",
 ]
+# Git repos below these folders get their branches, stashes and uncommitted changes pushed
+# to backup/<computer name>/... branches on their remote, if the remote is mine.
+GIT_SEARCH_ROOTS = [R"C:\Users\Senso\src", R"C:\Users\Senso\bin", R"C:\Users\Senso\Documents"]
+OWN_REMOTE_PREFIXES = (
+    "https://github.com/sensorflo/", "git@github.com:sensorflo/",
+    "https://gitlab.com/sensorflo1/", "git@gitlab.com:sensorflo1/",
+)
+
 # The primary repo. Unqualified 'repo' and 'backup' in this script always mean the primary one.
 # Each repo lives on whichever drive has its marker file in its root.
 REPO_MARKER_NAME = ".backup-destination"
@@ -133,6 +142,71 @@ def restic_backup():
     return restic("backup", *SOURCE_PATHS, *excludes, "--compression", "off", "--verbose")
 
 
+def find_git_repos(root):
+    for dirpath, dirnames, filenames in os.walk(root):
+        if ".git" in dirnames or ".git" in filenames:
+            yield Path(dirpath)
+        if ".git" in dirnames:
+            dirnames.remove(".git")
+
+
+def git(git_repo, *args):
+    return subprocess.run(["git", "-C", str(git_repo), *args], capture_output=True, text=True, check=True,
+                          env={**os.environ, "GIT_TERMINAL_PROMPT": "0"}).stdout
+
+
+def own_remote(git_repo):
+    for remote in git(git_repo, "remote").split():
+        if git(git_repo, "remote", "get-url", remote).strip().startswith(OWN_REMOTE_PREFIXES):
+            return remote
+    return None
+
+
+def backup_git_repo(git_repo, remote):
+    prefix = f"refs/heads/backup/{platform.node()}/"
+    branches = dict(line.split() for line in
+                    git(git_repo, "for-each-ref", "--format=%(refname:lstrip=2) %(objectname)", "refs/heads").splitlines())
+    if any(name == "stash" or name.startswith("stash/") for name in branches):
+        raise RuntimeError("a branch named 'stash' would clash with the backup of the stashes")
+    wanted = {prefix + name: sha for name, sha in branches.items()}
+    for i, sha in enumerate(git(git_repo, "stash", "list", "--format=%H").split()):
+        wanted[f"{prefix}stash/{i}"] = sha
+    uncommitted = git(git_repo, "stash", "create").strip()
+    if uncommitted:
+        wanted[f"{prefix}stash/uncommitted"] = uncommitted
+
+    existing = {ref: sha for sha, ref in (line.split() for line in git(git_repo, "ls-remote", "--heads", remote).splitlines())
+                if ref.startswith(prefix)}
+    refspecs = [f"+{sha}:{ref}" for ref, sha in wanted.items() if existing.get(ref) != sha]
+    refspecs += [f":{ref}" for ref in existing if ref not in wanted]
+    if not refspecs:
+        return "up to date"
+    git(git_repo, "push", "--quiet", remote, *refspecs)
+    return f"{len(refspecs)} backup branches updated"
+
+
+def backup_vcs():
+    failed = 0
+    for root in GIT_SEARCH_ROOTS:
+        for git_repo in find_git_repos(root):
+            remote = own_remote(git_repo)
+            if remote is None:
+                print(f"{git_repo}: skipped, no remote of mine")
+                continue
+            try:
+                print(f"{git_repo}: {backup_git_repo(git_repo, remote)}")
+            except (RuntimeError, subprocess.CalledProcessError) as error:
+                failed += 1
+                print(f"{git_repo}: FAILED: {getattr(error, 'stderr', None) or error}", file=sys.stderr)
+    return 1 if failed else 0
+
+
+def backup_all():
+    vcs_exit_code = backup_vcs()
+    files_exit_code = restic_backup()
+    return vcs_exit_code or files_exit_code
+
+
 def restic_init_secondary():
     if Path(secondary_repo_path()).exists():
         sys.exit(f"Not initializing: {secondary_repo_path()} already exists.")
@@ -162,7 +236,9 @@ def restic_passthrough(restic_args, repo):
 
 
 class Action(enum.Enum):
-    BACKUP = enum.auto()
+    BACKUP_ALL = enum.auto()
+    BACKUP_FILES = enum.auto()
+    BACKUP_VCS = enum.auto()
     INIT = enum.auto()
     RESTIC = enum.auto()
     RESTIC_SECONDARY = enum.auto()
@@ -181,8 +257,13 @@ def main():
                                             f"Secondary repository: {path_for_help(SECONDARY_REPO_MARKER_NAME, SECONDARY_REPO_DIR)}",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--backup", dest="action", action="store_const", const=Action.BACKUP,
-                       help="back up (the default)")
+    group.add_argument("--backup-all", dest="action", action="store_const", const=Action.BACKUP_ALL,
+                       help="--backup-vcs, then --backup-files (the default)")
+    group.add_argument("--backup-files", dest="action", action="store_const", const=Action.BACKUP_FILES,
+                       help="back up files into the repo")
+    group.add_argument("--backup-vcs", dest="action", action="store_const", const=Action.BACKUP_VCS,
+                       help="push branches, stashes and uncommitted changes of my version-controlled repos "
+                            "(currently git only) to backup branches")
     group.add_argument("--init", dest="action", action="store_const", const=Action.INIT,
                        help="create a new, empty repo")
     group.add_argument("--restic", dest="action", action=StoreResticArgs, const=Action.RESTIC,
@@ -195,12 +276,16 @@ def main():
                        help="create a new, empty secondary repo with the primary repo's chunker parameters")
     group.add_argument("--update-secondary", dest="action", action="store_const", const=Action.UPDATE_SECONDARY,
                        help="copy snapshots missing in the secondary repo from the primary repo")
-    parser.set_defaults(action=Action.BACKUP)
+    parser.set_defaults(action=Action.BACKUP_ALL)
     args = parser.parse_args()
 
     match args.action:
-        case Action.BACKUP:
+        case Action.BACKUP_ALL:
+            exit_code = backup_all()
+        case Action.BACKUP_FILES:
             exit_code = restic_backup()
+        case Action.BACKUP_VCS:
+            exit_code = backup_vcs()
         case Action.INIT:
             exit_code = restic_init()
         case Action.RESTIC:
