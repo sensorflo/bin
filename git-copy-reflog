@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+#
+# NAME
+#    git-copy-reflog - Create refs, one for each entry of a ref's reflog.
+#
+# SYNOPSYS
+#   git-copy-reflog [OPTIONS]... [<ref>]
+#
+# DESCRIPTION
+#   Given a Git reference, create a copy of its reflog by creating a reference for each entry of that reflog. The new
+#   references follow the naming scheme refs/heads/reflog-copy/<ref>/<nr>. That is, currently, these references are
+#   local branches.
+#   Note that git gc by default prunes reflogs periodically.
+#
+# TODO
+# - Optionally, don't follow symbolic refs
+# - Customize pattern used to create new ref name
+# - Optionally, create tags, not branches. or a ref in general? note that branches create reflogs themselves
+import argparse
+import importlib
+import re
+import subprocess
+import sys
+from urllib.parse import quote
+import keyring
+import requests
+
+def git(*args):
+    result = subprocess.run(['git'] + list(args), text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+def match_group(pattern, str, default = "unknown"):
+    match = re.search(pattern, str)
+    if match:
+        match_group = match.group(1)
+        if match_group:
+            return match_group
+    return default
+
+# Massage ISO date into a form usable as a part of a refname.
+def massage_iso_date(iso_date):
+    result = match_group(r'^(.*) \+\d+', iso_date) # cut off timezone
+    result = result.replace(' ', '_')
+    result = result.replace(':', '-')
+    return result
+
+def shorten_reflog_message(message):
+    regexes = [r'^(\w+)(\s*\(.*\))?:', r'^update by (push)', r'^(fetch)\b']
+    for regex in regexes:
+        result = match_group(regex, message, None)
+        if result:
+            return result
+    return "unknown"
+
+def sanitize_refname(name):
+    result = []
+    for c in name:
+        if 'a' <= c <= 'z' or 'A' <= c <= 'Z' or '0' <= c <= '9' or c in "-._/":
+            result.append(c)
+        else:
+            result.append('-')
+    return ''.join(result)
+
+def main():
+    if False:
+        required_modules = ["requests", "keyring"]
+        missing_modules = []
+        for module in required_modules:
+            try:
+                importlib.import_module(module)
+            except ImportError:
+                missing_modules.append(module)
+        if missing_modules:
+            print("The following required modules are missing:")
+            for module in missing_modules:
+                print(f"  - {module} (install with: pip install {module})")
+            exit(1)
+
+    print("hello world")
+    parser = argparse.ArgumentParser(description="Create refs, one for each entry of a ref's reflog.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("-n", "--max-count", type=int, default=-1, help="Maximal number of reflog entries created. A negative number means unlimited.")
+    parser.add_argument("--order", choices=['chronological', 'reverse-chronological'], type=str, default='chronological', help="Order of created reflog entry copies.")
+    parser.add_argument("--gitlab", type=str, help="GitLab URL,user_name,project,merge_request_id")
+    parser.add_argument("reference", nargs="?", type=str, default="HEAD", help="Ref whose reflog to copy.")
+    args = parser.parse_args()
+    print("I heard you")
+
+    if args.gitlab is not None:
+        url, user_name, project_path, merge_request_id = args.gitlab.split(',')
+        print(f"url={url}, user_name={user_name}, project_path={project_path}, merge_request_id={merge_request_id}")
+
+        key_service_name = 'gitlab_api'
+        token = keyring.get_password(key_service_name, user_name)
+        print(f"token={token}")
+        if not token:
+            import getpass
+            token = getpass.getpass("Enter your GitLab private token: ")
+            keyring.set_password(key_service_name, user_name, token)
+
+        quoted_project_path = quote(project_path, safe='')
+        api_url = f"{url}/api/v4/projects/{quoted_project_path}/merge_requests/{merge_request_id}/versions"
+        headers = {"PRIVATE-TOKEN": token}
+        requests.get(api_url, headers=headers)
+
+    # git symbolic-ref <ref>
+    # - must pass a fully qualified refname
+    # - fails if it is not a symbolic ref
+
+    # It is not clear whether the 'git show-ref --exists' is required. The goal is to dissallow valid revisions that are
+    # not valid refnames (e.g. a commit hash).
+    full_refname = git('rev-parse', '--symbolic-full-name', args.reference)
+    if not full_refname or git('show-ref', '--exists', full_refname) is None:
+        sys.exit(f"'{args.reference}' is not an existing refererence.")
+
+    src_refname = git('rev-parse', '--abbrev-ref', args.reference)
+
+    dest_refname_prefix = f"refs/heads/reflog-copy/{src_refname}/"
+
+    # Make a clean table, i.e. remove existing reflogcopy for the given ref.
+    existing_reflogcopy_refnames = git('for-each-ref', '--format=%(refname)', f"{dest_refname_prefix}*").splitlines()
+    for refname in existing_reflogcopy_refnames:
+        git('update-ref', '-d', refname)
+
+    # Recall:
+    # - 'git reflog' is short for 'git reflog show', which is an alias for
+    #   'git log --walk-reflogs --abbrev-commit --pretty=oneline'.
+    # - git log's pretty format placeholders %cd etc. refer to the commit's date, not the reflog entry's timestamp.
+    #   There doesn't seem to be a placeholder which directly refers to the reflog entry's timestamp, so we use %gd
+    #   as a workaround, requiring us to extract the date from what %gd provides.
+    reflog_entries = git('reflog', 'show', '--format=%H%x00%gd%x00%gs', '--date=iso', src_refname).splitlines()
+    if len(reflog_entries) == 0:
+        sys.exit(f"'{args.reference}' has no reflog")
+    if args.order == 'chronological':
+        reflog_entries = list(reversed(reflog_entries))
+    if (args.max_count >= 0):
+        reflog_entries = reflog_entries[:args.max_count]
+
+    # Create a new ref for each reflog entry
+    for index, reflog_entry in enumerate(reflog_entries):
+        commit_id, reflog_selector, message = reflog_entry.split('\x00')
+        timestamp = massage_iso_date(match_group(r'\{(.*)\}', reflog_selector))
+        message = shorten_reflog_message(message)
+        new_refname = sanitize_refname(f"{dest_refname_prefix}{index}__{timestamp}__{message}")
+        git('-c', 'core.logAllRefUpdates=false', 'update-ref', new_refname, commit_id)
+
+if __name__ == "__main__":
+    main()
