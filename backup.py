@@ -156,22 +156,23 @@ def restic_update_secondary():
                   repo=secondary_repo_path())
 
 
-def restic_passthrough(restic_args):
-    copy_script_to_drive_of(repo_path())
-    return restic(*restic_args)
+def restic_passthrough(restic_args, repo):
+    copy_script_to_drive_of(repo)
+    return restic(*restic_args, repo=repo)
 
 
 class Action(enum.Enum):
     BACKUP = enum.auto()
     INIT = enum.auto()
     RESTIC = enum.auto()
+    RESTIC_SECONDARY = enum.auto()
     INIT_SECONDARY = enum.auto()
     UPDATE_SECONDARY = enum.auto()
 
 
 class StoreResticArgs(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        setattr(namespace, self.dest, Action.RESTIC)
+        setattr(namespace, self.dest, self.const)
         namespace.restic_args = values
 
 
@@ -184,8 +185,12 @@ def main():
                        help="back up (the default)")
     group.add_argument("--init", dest="action", action="store_const", const=Action.INIT,
                        help="create a new, empty repo")
-    group.add_argument("--restic", dest="action", action=StoreResticArgs, nargs=argparse.REMAINDER, metavar="ARGS",
+    group.add_argument("--restic", dest="action", action=StoreResticArgs, const=Action.RESTIC,
+                       nargs=argparse.REMAINDER, metavar="ARGS",
                        help="run restic with the remaining ARGS")
+    group.add_argument("--restic-secondary", dest="action", action=StoreResticArgs, const=Action.RESTIC_SECONDARY,
+                       nargs=argparse.REMAINDER, metavar="ARGS",
+                       help="run restic with the remaining ARGS on the secondary repo")
     group.add_argument("--init-secondary", dest="action", action="store_const", const=Action.INIT_SECONDARY,
                        help="create a new, empty secondary repo with the primary repo's chunker parameters")
     group.add_argument("--update-secondary", dest="action", action="store_const", const=Action.UPDATE_SECONDARY,
@@ -199,7 +204,9 @@ def main():
         case Action.INIT:
             exit_code = restic_init()
         case Action.RESTIC:
-            exit_code = restic_passthrough(args.restic_args)
+            exit_code = restic_passthrough(args.restic_args, repo_path())
+        case Action.RESTIC_SECONDARY:
+            exit_code = restic_passthrough(args.restic_args, secondary_repo_path())
         case Action.INIT_SECONDARY:
             exit_code = restic_init_secondary()
         case Action.UPDATE_SECONDARY:
