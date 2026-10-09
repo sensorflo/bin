@@ -27,8 +27,8 @@ SOURCE_PATHS = [
 REPO_MARKER_NAME = ".backup-destination"
 REPO_DIR = R"Backup\restic-backup-dell-xps-15-home-folder"
 # The secondary repo holds copies of the primary repo's snapshots (restic copy).
-SECONDARY_REPO_MARKER_NAME = ".backup-destination-secondary"
-SECONDARY_REPO_DIR = R"Backup\restic-backup-dell-xps-15-home-folder"
+SECONDARY_REPO_MARKER_NAME = ".secondary-backup-destination"
+SECONDARY_REPO_DIR = R"Backup\secondary-restic-backup-dell-xps-15-home-folder"
 
 # Case-insensitive restic exclude patterns (--iexclude).
 EXCLUDES = [
@@ -157,7 +157,7 @@ class StoreResticArgs(argparse.Action):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, epilog=f"Repository: {path_for_help(REPO_MARKER_NAME, REPO_DIR)}\n"
+    parser = argparse.ArgumentParser(description=__doc__, epilog=f"(Primary) Repository: {path_for_help(REPO_MARKER_NAME, REPO_DIR)}\n"
                                             f"Secondary repository: {path_for_help(SECONDARY_REPO_MARKER_NAME, SECONDARY_REPO_DIR)}",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     group = parser.add_mutually_exclusive_group()
