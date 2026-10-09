@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+from subprocess import call
+
+import exifread
+import userpaths
+import win32api
+import win32file
+
+
+def guess_source_dir():
+    drives = win32api.GetLogicalDriveStrings().split('\x00')
+    candidate_source_dir = None
+    for drive in drives:
+        if win32file.GetDriveType(drive) != 2: # Removable Disk
+            continue
+        tentative_dir = Path(drive) / "DCIM"
+        if not tentative_dir.is_dir():
+            continue
+        if candidate_source_dir:
+            sys.exit(f"Found at least two candidate source directories: '{tentative_dir}' and '{candidate_source_dir}'")
+        candidate_source_dir = tentative_dir
+    return candidate_source_dir
+
+def canonicalize_file_name(path):
+    with open(path, 'rb') as f:
+        tags = exifread.process_file(f, stop_tag="EXIF DateTimeOriginal")
+        date_time = tags.get("EXIF DateTimeOriginal")
+        if not date_time:
+            sys.exit(f"Can't extract EXIF DateTimeOrignal from '{path}'")
+        date_time = datetime.strptime(str(date_time), '%Y%m%dT%H%M%S')
+        old_filename = Path(path).name
+        return f"{date_time}_{old_filename}"
+
+def make_old_new_path_list(source_dir):
+    pairs = []
+    for rel_path in Path(source_dir).rglob('*.arw', case_sensitive=False):
+         abs_path = source_dir / rel_path
+         if not abs_path.is_file():
+             continue
+         new_file_name = canonicalize_file_name(abs_path)
+         pairs.append([rel_path, new_file_name])
+    return pairs
+
+# use robocopy. initially, recreate 100MSDCF structure; to be able to map new filename to file on SD.
+def copy_file_tree(source_path, dest_path):
+    ""
+
+def main():
+    parser = argparse.ArgumentParser(description="Lorem ipsum.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--source-dir", type=str, help="lorem ipsum")
+    parser.add_argument("--dest-root-dir", default=userpaths.get_my_pictures(), type=str, help="lorem ipsum")
+    parser.add_argument("infix-dir", nargs=1, type=str, help="lorem ipsum") # "party/ZNA 2026"
+    args = parser.parse_args()
+    if not args.source_dir:
+        args.source_dir = guess_source_dir()
+
+    final_dest_dir = Path(args.dest_root_dir) / args.infix_dir
+    temp_dest_dir = tempfile.mkdtemp(prefix="img-sync-temp", dir=final_dest_dir)
+
+    copy_file_tree(args.source_dir, temp_dest_dir)
+
+    # rename-move on internal disc
+    # rename-move to backup on SD
+    # copy (after rename) to backup ext disc
+    # import into darktable, apply style, make thumbnails
+    # git commit
+    # remove temp_dest_dir iff it is empty
+
+    old_file_name = ""
+    date_time_ = date_time_original(source_path)
+    new_file_name = f"{date_time_original}_{old_file_name}"
+    dest_path = f"{dest_dir}\{new_file_name}"
+
+if __name__ == "__main__":
+    main()
