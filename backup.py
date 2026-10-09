@@ -31,6 +31,12 @@ OWN_REMOTE_PREFIXES = (
     "https://github.com/sensorflo/", "git@github.com:sensorflo/",
     "https://gitlab.com/sensorflo1/", "git@gitlab.com:sensorflo1/",
 )
+# Names of git repo folders that are skipped: either their remote isn't mine, or they have
+# intentionally no remote. Any other git repo without a remote of mine is an error.
+GIT_REPOS_WITHOUT_OWN_REMOTE = {
+    "cppfront", "googletest", "vcpkg",
+    "ef", "SyncArwDng", "console-application-gtest",
+}
 
 # The primary repo. Unqualified 'repo' and 'backup' in this script always mean the primary one.
 # Each repo lives on whichever drive has its marker file in its root.
@@ -187,18 +193,21 @@ def backup_git_repo(git_repo, remote):
 
 
 def backup_vcs():
-    failed = 0
+    failed = []
     for root in GIT_SEARCH_ROOTS:
         for git_repo in find_git_repos(root):
-            remote = own_remote(git_repo)
-            if remote is None:
-                print(f"{git_repo}: skipped, no remote of mine")
+            if git_repo.name in GIT_REPOS_WITHOUT_OWN_REMOTE:
                 continue
             try:
+                remote = own_remote(git_repo)
+                if remote is None:
+                    raise RuntimeError("no remote of mine, and not in GIT_REPOS_WITHOUT_OWN_REMOTE")
                 print(f"{git_repo}: {backup_git_repo(git_repo, remote)}")
             except (RuntimeError, subprocess.CalledProcessError) as error:
-                failed += 1
+                failed.append(git_repo)
                 print(f"{git_repo}: FAILED: {getattr(error, 'stderr', None) or error}", file=sys.stderr)
+    if failed:
+        print("Failed git repos:", *failed, sep="\n    ", file=sys.stderr)
     return 1 if failed else 0
 
 
