@@ -56,13 +56,10 @@ EXCLUDES = [
     R"S:\$RECYCLE.BIN\**",
 ]
 
-# Options every restic command gets
-COMMON_RESTIC_ARGS = ["--repo", REPO_PATH, "--insecure-no-password"]
-
 
 def restic(*args):
     """Run restic with the given arguments, return its exit code."""
-    return subprocess.run(["restic", *args, *COMMON_RESTIC_ARGS]).returncode
+    return subprocess.run(["restic", *args, "--repo", REPO_PATH, "--insecure-no-password"]).returncode
 
 
 def restic_init():
