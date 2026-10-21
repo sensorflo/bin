@@ -89,7 +89,7 @@ SOURCE_PATHS = [
 # to backup/<computer name>/... branches on their remote, if the remote is mine.
 GIT_SEARCH_ROOTS = [R"C:\Users\Senso\src", R"C:\Users\Senso\bin", R"C:\Users\Senso\Documents"]
 # Additional single git repos, whose subfolders are not searched for further git repos.
-GIT_REPOS = [R"C:\Users\Senso"]
+GIT_REPOS = [R"C:\Users\Senso", R"C:\Users\Senso\Large\Pictures"]
 OWN_REMOTE_PREFIXES = (
     "https://github.com/sensorflo/", "git@github.com:sensorflo/",
     "https://gitlab.com/sensorflo1/", "git@gitlab.com:sensorflo1/",
